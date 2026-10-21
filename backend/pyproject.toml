@@ -1,0 +1,28 @@
+[project]
+name = "quantlens-api"
+version = "0.1.0"
+description = "QuantLens portfolio management and quantitative analytics API"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.115,<1", "uvicorn[standard]>=0.30,<1",
+  "sqlalchemy>=2.0,<3", "psycopg[binary]>=3.2,<4", "alembic>=1.14,<2",
+  "pydantic-settings>=2.6,<3", "email-validator>=2.2,<3",
+  "pyjwt>=2.9,<3", "pwdlib[argon2]>=0.2,<1",
+  "numpy>=2.0,<3", "pandas>=2.2,<4", "arch>=7,<9",
+  "yfinance>=0.2.50,<2", "reportlab>=4.2,<5",
+]
+
+[dependency-groups]
+dev = ["pytest>=8,<10", "httpx>=0.27,<1", "ruff>=0.9,<1"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+ignore = ["E501"]
