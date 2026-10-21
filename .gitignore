@@ -1,0 +1,29 @@
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+.jwt-secret
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.db
+*.db-*
+
+# Mobile and generated builds
+node_modules/
+.expo/
+dist/
+web-build/
+mobile/android/
+mobile/ios/
+*.tsbuildinfo
+
+# Local evaluation artifacts and downloaded market data
+experiments/results/
+data/downloads/
+*.log
