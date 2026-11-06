@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "QuantLens",
+    "slug": "quantlens",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.kartikmehra.quantlens"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0C1312",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.kartikmehra.quantlens"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": ["expo-router", "expo-secure-store", "expo-sharing"],
+    "scheme": "quantlens",
+    "backgroundColor": "#0C1312"
+  }
+}
