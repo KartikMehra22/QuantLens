@@ -10,9 +10,10 @@ import numpy as np
 import pandas as pd
 from fastapi import Depends, FastAPI, HTTPException, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field
-from sqlalchemy import or_, select
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import or_, select, text
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from .analytics.forecasting import forecast
@@ -91,7 +92,12 @@ def serialize_portfolio(portfolio):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "quantlens", "version": "0.1.0"}
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except SQLAlchemyError:
+        return JSONResponse(status_code=503, content={"status": "unavailable", "service": "quantlens"})
+    return {"status": "ok", "service": "quantlens", "version": "0.1.0", "database": engine.dialect.name}
 
 
 @app.post("/api/v1/auth/register", status_code=201)

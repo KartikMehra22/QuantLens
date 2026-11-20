@@ -1,20 +1,18 @@
-import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { tokenStorage } from "./session";
+import { getServerUrl } from "./connection";
 
-const host =
-  Platform.OS === "web" && typeof window !== "undefined"
-    ? window.location.hostname
-    : Constants.expoConfig?.hostUri?.split(":")[0] || "localhost";
-export const API_URL = (
-  process.env.EXPO_PUBLIC_API_URL || `http://${host}:8000`
-).replace(/\/$/, "");
 let unauthorized: (() => void) | null = null;
 export const setUnauthorized = (callback: (() => void) | null) => {
   unauthorized = callback;
 };
 
 export async function request(path: string, options: RequestInit = {}) {
+  const baseUrl = await getServerUrl();
+  if (!baseUrl)
+    throw new Error(
+      "Set your server address using Server connection before signing in.",
+    );
   const token = await tokenStorage.get();
   const controller = new AbortController();
   const timer = setTimeout(
@@ -22,7 +20,7 @@ export async function request(path: string, options: RequestInit = {}) {
     path.includes("data-refreshes") ? 150000 : 45000,
   );
   try {
-    const response = await fetch(`${API_URL}${path}`, {
+    const response = await fetch(`${baseUrl}${path}`, {
       ...options,
       signal: controller.signal,
       headers: {

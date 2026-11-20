@@ -3,9 +3,15 @@ import tempfile
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.engine import make_url
 
 _temp = tempfile.TemporaryDirectory(prefix="quantlens-tests-")
-os.environ["DATABASE_URL"] = f"sqlite:///{_temp.name}/test.db"
+test_database = os.getenv("QUANTLENS_TEST_DATABASE_URL", "")
+if test_database:
+    url = make_url(test_database)
+    if url.get_backend_name() != "postgresql" or not (url.database or "").endswith("_test"):
+        raise RuntimeError("PostgreSQL integration tests require a dedicated database ending in _test.")
+os.environ["DATABASE_URL"] = test_database or f"sqlite:///{_temp.name}/test.db"
 os.environ["JWT_SECRET"] = "test-only-secret-that-is-long-enough-for-hmac-verification"
 
 from app.main import app  # noqa: E402

@@ -7,6 +7,7 @@ import React, {
   useState,
 } from "react";
 import { api, setUnauthorized } from "./services/api";
+import { getServerUrl, saveServerUrl } from "./services/connection";
 import { tokenStorage as storage } from "./services/session";
 import { AuthResponse, Portfolio, Summary, User } from "./types";
 
@@ -15,6 +16,7 @@ type Session = {
   ready: boolean;
   accept: (auth: AuthResponse) => Promise<void>;
   logout: () => Promise<void>;
+  changeServer: (url: string) => Promise<void>;
 };
 const SessionContext = createContext<Session>(null!);
 
@@ -55,6 +57,11 @@ export function SessionProvider({ children }: React.PropsWithChildren) {
     client.clear();
     setUser(auth.user);
   };
+  const changeServer = async (url: string) => {
+    if (url === (await getServerUrl())) return;
+    await clear();
+    await saveServerUrl(url);
+  };
   const logout = async () => {
     try {
       await api("/auth/logout", "POST");
@@ -63,7 +70,9 @@ export function SessionProvider({ children }: React.PropsWithChildren) {
     }
   };
   return (
-    <SessionContext.Provider value={{ user, ready, accept, logout }}>
+    <SessionContext.Provider
+      value={{ user, ready, accept, logout, changeServer }}
+    >
       {children}
     </SessionContext.Provider>
   );

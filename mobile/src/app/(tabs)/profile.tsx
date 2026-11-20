@@ -12,6 +12,7 @@ import {
   SectionTitle,
   Sheet,
 } from "../../components/ui";
+import { ServerSettings } from "../../components/server-settings";
 import { usePortfolios, useSession, useSummary } from "../../providers";
 import { api, exportReport } from "../../services/api";
 import { colors, money, pct, s, shortDate } from "../../theme";
@@ -111,6 +112,7 @@ export default function Profile() {
         </View>
         <Text style={s.small}>QuantLens v0.1 · Virtual portfolios · INR</Text>
       </View>
+      <ServerSettings />
       <ErrorBox error={error} />
       {message ? (
         <View

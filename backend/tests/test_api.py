@@ -187,3 +187,17 @@ def test_instrument_history_has_source_and_dates(client, account):
     assert history["source"] == "synthetic"
     assert len(history["prices"]) == 252
     assert history["prices"][0]["date"] < history["prices"][-1]["date"]
+
+
+def test_health_reports_database_unavailability_without_exposing_details(client, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+
+    def fail():
+        raise OperationalError("private database address", {}, Exception("private connection detail"))
+
+    assert client.get("/health").json()["status"] == "ok"
+    monkeypatch.setattr("app.main.engine.connect", fail)
+    response = client.get("/health")
+    assert response.status_code == 503
+    assert response.json() == {"status": "unavailable", "service": "quantlens"}
+    assert "private" not in response.text

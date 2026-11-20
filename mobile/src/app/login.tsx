@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LineChart } from "../components/charts";
+import { ServerSettings } from "../components/server-settings";
 import { Badge, Button, ErrorBox, Field, Loading } from "../components/ui";
 import { useSession } from "../providers";
 import { api } from "../services/api";
@@ -118,6 +119,7 @@ export default function Login() {
               labels={["ILLUSTRATIVE CHART", "NOT MARKET DATA"]}
             />
           </View>
+          <ServerSettings />
           <View style={{ gap: 16 }}>
             <Text
               style={{ color: colors.text, fontSize: 21, fontWeight: "500" }}

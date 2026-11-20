@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-development}
       POSTGRES_DB: quantlens
     ports:
-      - "127.0.0.1:5432:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-55433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -14,5 +14,21 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
+  db-test:
+    image: postgres:17-alpine
+    profiles: [test]
+    environment:
+      POSTGRES_USER: quantlens
+      POSTGRES_PASSWORD: local-test-only
+      POSTGRES_DB: quantlens_test
+    ports:
+      - "127.0.0.1:55432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quantlens -d quantlens_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 15
 volumes:
   postgres_data:

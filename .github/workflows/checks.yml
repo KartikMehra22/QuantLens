@@ -2,6 +2,23 @@ name: QuantLens checks
 on: [push, pull_request]
 jobs:
   backend:
+    strategy:
+      matrix:
+        database: [sqlite, postgresql]
+    env:
+      QUANTLENS_TEST_DATABASE_URL: ${{ matrix.database == 'postgresql' && 'postgresql+psycopg://quantlens:local-test-only@localhost:5432/quantlens_test' || '' }}
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: quantlens
+          POSTGRES_PASSWORD: local-test-only
+          POSTGRES_DB: quantlens_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U quantlens -d quantlens_test"
+          --health-interval 3s --health-timeout 3s --health-retries 15
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -27,6 +44,7 @@ jobs:
           cache: npm
           cache-dependency-path: mobile/package-lock.json
       - run: npm ci
+      - run: npm test
       - run: npm run typecheck
       - run: npm run lint
       - run: npx expo export --platform web
