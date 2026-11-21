@@ -103,14 +103,16 @@ def fetch_yahoo(instrument_id: str) -> pd.DataFrame:
     frame = yf.Ticker(instrument_id).history(period="5y", auto_adjust=False, timeout=15)
     if frame.empty or "Adj Close" not in frame or "Close" not in frame:
         raise ValueError(f"No usable adjusted history returned for {instrument_id}.")
-    frame = frame[["Close", "Adj Close"]].copy()
+    frame = frame[[c for c in ["Open", "High", "Low", "Close", "Adj Close", "Volume"] if c in frame]].copy()
     frame.index = pd.Index([v.date() for v in frame.index])
     frame = frame.loc[frame.index < date.today()]
     if (
         frame.empty
         or frame.isna().any().any()
         or not np.isfinite(frame.to_numpy()).all()
-        or (frame <= 0).any().any()
+        or (frame[["Close", "Adj Close"]] < 0.000001).any().any()
+        or (frame[["Close", "Adj Close"]] > 1e12).any().any()
+        or (frame < 0).any().any()
     ):
         raise ValueError(f"Invalid historical prices for {instrument_id}.")
     return frame[~frame.index.duplicated(keep="last")].sort_index()
@@ -128,6 +130,10 @@ def replace_history(db: Session, ident: str, frame: pd.DataFrame, source: str):
                 close=Decimal(str(float(row["Close"]))),
                 adjusted_close=Decimal(str(float(row["Adj Close"]))),
                 source=source,
+                open=Decimal(str(float(row["Open"]))) if "Open" in row else None,
+                high=Decimal(str(float(row["High"]))) if "High" in row else None,
+                low=Decimal(str(float(row["Low"]))) if "Low" in row else None,
+                volume=int(row["Volume"]) if "Volume" in row else None,
             )
             for day, row in frame.iterrows()
         ]
