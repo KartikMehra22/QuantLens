@@ -1,0 +1,40 @@
+# Local packaged demonstration. The API is published on loopback only.
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: quantlens
+      POSTGRES_PASSWORD: ${DEPLOY_DATABASE_PASSWORD:?Set DEPLOY_DATABASE_PASSWORD}
+      POSTGRES_DB: quantlens
+    volumes:
+      - study_database:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quantlens -d quantlens"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+  api:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://quantlens:${DEPLOY_DATABASE_PASSWORD:?Set DEPLOY_DATABASE_PASSWORD}@db:5432/quantlens
+      JWT_SECRET: ${DEPLOY_JWT_SECRET:?Set DEPLOY_JWT_SECRET}
+      ALLOW_DEMO: ${DEPLOY_ALLOW_DEMO:-false}
+      CORS_ORIGINS: ${DEPLOY_CORS_ORIGINS:-http://localhost:8081,http://127.0.0.1:8081}
+      SMTP_HOST: ${DEPLOY_SMTP_HOST:-}
+      SMTP_PORT: ${DEPLOY_SMTP_PORT:-587}
+      SMTP_TLS: ${DEPLOY_SMTP_TLS:-true}
+      SMTP_USERNAME: ${DEPLOY_SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${DEPLOY_SMTP_PASSWORD:-}
+      MAIL_FROM: ${DEPLOY_MAIL_FROM:-QuantLens <no-reply@quantlens.local>}
+    ports:
+      - "127.0.0.1:${DEPLOY_API_PORT:-8002}:8000"
+    volumes:
+      - app_state:/app/state
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+volumes:
+  study_database:
+  app_state:
