@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import { tokenStorage } from "./session";
+import { createAuthorizedRequester } from "./http-client";
 import { getServerUrl } from "./connection";
 
 let unauthorized: (() => void) | null = null;
@@ -7,31 +8,33 @@ export const setUnauthorized = (callback: (() => void) | null) => {
   unauthorized = callback;
 };
 
+const authorizedRequest = createAuthorizedRequester({
+  read: tokenStorage.read,
+  save: (value) =>
+    tokenStorage.save(value.access_token, value.refresh_token, value.user_id),
+  clear: tokenStorage.clear,
+  currentServer: getServerUrl,
+  expired: () => unauthorized?.(),
+});
+
 export async function request(path: string, options: RequestInit = {}) {
   const baseUrl = await getServerUrl();
   if (!baseUrl)
     throw new Error(
       "Set your server address using Server connection before signing in.",
     );
-  const token = await tokenStorage.get();
   const controller = new AbortController();
   const timer = setTimeout(
     () => controller.abort(),
     path.includes("data-refreshes") ? 150000 : 45000,
   );
   try {
-    const response = await fetch(`${baseUrl}${path}`, {
+    const response = await authorizedRequest(baseUrl, path, {
       ...options,
       signal: controller.signal,
-      headers: {
-        ...(options.body ? { "Content-Type": "application/json" } : {}),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...options.headers,
-      },
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
-      if (response.status === 401 && token) unauthorized?.();
       const detail =
         typeof body.detail === "string" ? body.detail : body.detail?.[0]?.msg;
       throw new Error(detail || `Request failed (${response.status}).`);
@@ -66,11 +69,37 @@ export async function exportReport(portfolioId: string, format: "csv" | "pdf") {
   const response = await request(
     `/api/v1/portfolios/${portfolioId}/export.${format}`,
   );
+  await shareDownload(
+    response,
+    `quantlens-report.${format}`,
+    format === "pdf" ? "application/pdf" : "text/csv",
+  );
+}
+
+export async function exportEvaluation(
+  portfolioId: string,
+  evaluationId: string,
+) {
+  const response = await request(
+    `/api/v1/portfolios/${portfolioId}/evaluations/${evaluationId}/export.json`,
+  );
+  await shareDownload(
+    response,
+    "quantlens-evaluation.json",
+    "application/json",
+  );
+}
+
+async function shareDownload(
+  response: Response,
+  filename: string,
+  mimeType: string,
+) {
   if (Platform.OS === "web") {
     const url = URL.createObjectURL(await response.blob());
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `quantlens-report.${format}`;
+    anchor.download = filename;
     anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
   } else {
@@ -78,11 +107,9 @@ export async function exportReport(portfolioId: string, format: "csv" | "pdf") {
     const Sharing = await import("expo-sharing");
     if (!(await Sharing.isAvailableAsync()))
       throw new Error("File sharing is unavailable on this device.");
-    const file = new File(Paths.cache, `quantlens-${Date.now()}.${format}`);
+    const file = new File(Paths.cache, `${Date.now()}-${filename}`);
     file.create();
     await file.write(new Uint8Array(await response.arrayBuffer()));
-    await Sharing.shareAsync(file.uri, {
-      mimeType: format === "pdf" ? "application/pdf" : "text/csv",
-    });
+    await Sharing.shareAsync(file.uri, { mimeType });
   }
 }
