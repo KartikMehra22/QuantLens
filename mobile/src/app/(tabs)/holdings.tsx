@@ -20,13 +20,25 @@ import { colors, money, pct, s } from "../../theme";
 import { Holding, Instrument } from "../../types";
 
 type PriceHistory = {
-  prices: { date: string; close: number }[];
+  prices: {
+    date: string;
+    close: number;
+    open: number | null;
+    high: number | null;
+    low: number | null;
+    volume: number | null;
+  }[];
   source: string;
 };
 export default function Holdings() {
   const { selected } = usePortfolios();
   const query = useSummary();
   const client = useQueryClient();
+  const positions = useQuery({
+    queryKey: ["holding-positions", selected?.id],
+    queryFn: () => api<Holding[]>(`/portfolios/${selected!.id}/holdings`),
+    enabled: !!selected,
+  });
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(true);
   const [holding, setHolding] = useState<Holding | null>(null);
@@ -56,9 +68,9 @@ export default function Holdings() {
       ),
     enabled: open && !editing && !!holding && !!selected,
   });
-  const show = (item: Holding | null) => {
+  const show = (item: Holding | null, editOnly = false) => {
     setHolding(item);
-    setEditing(!item);
+    setEditing(!item || editOnly);
     setInstrument(item ? { ...item, id: item.instrument_id } : null);
     setQuantity(item ? String(item.quantity) : "");
     setCost(item ? String(item.average_cost) : "");
@@ -92,6 +104,7 @@ export default function Holdings() {
           : { instrument_id: instrument.id, quantity, average_cost: cost },
       );
       await client.invalidateQueries({ queryKey: ["summary"] });
+      await client.invalidateQueries({ queryKey: ["holding-positions"] });
       setOpen(false);
     } catch (e) {
       setError(e);
@@ -108,7 +121,8 @@ export default function Holdings() {
     >
       <View style={s.between}>
         <Text style={s.label}>
-          {query.data?.holdings.length || 0} EQUITY HOLDINGS
+          {query.data?.holdings.length || positions.data?.length || 0} EQUITY
+          HOLDINGS
         </Text>
         <Pressable
           disabled={!selected}
@@ -122,7 +136,31 @@ export default function Holdings() {
         </Pressable>
       </View>
       {query.error ? (
-        <ErrorBox error={query.error} />
+        <View style={{ gap: 12 }}>
+          <ErrorBox error={query.error} />
+          <Text style={s.small}>
+            Positions remain editable while price history is unavailable.
+            Download history in Profile or remove the missing holding.
+          </Text>
+          <ErrorBox error={positions.error} />
+          {positions.data?.map((item) => (
+            <Pressable
+              key={item.id}
+              accessibilityRole="button"
+              accessibilityLabel={`Edit ${item.symbol}`}
+              onPress={() => show(item, true)}
+              style={s.card}
+            >
+              <Text style={s.body}>
+                {item.symbol} · {item.exchange}
+              </Text>
+              <Text style={s.small}>
+                {item.quantity} shares · Avg. {money(item.average_cost, 2)}
+              </Text>
+              <Text style={{ color: colors.green }}>Edit position</Text>
+            </Pressable>
+          ))}
+        </View>
       ) : selected && query.isPending ? (
         <Loading />
       ) : !query.data?.holdings.length ? (
@@ -257,6 +295,45 @@ export default function Holdings() {
                 />
               )
             )}
+            {history.data?.prices.length
+              ? (() => {
+                  const bar =
+                    history.data.prices[history.data.prices.length - 1];
+                  return (
+                    <View style={[s.card, { gap: 8 }]}>
+                      <Text style={s.label}>LATEST DAILY BAR · {bar.date}</Text>
+                      {(
+                        [
+                          ["Open", bar.open],
+                          ["High", bar.high],
+                          ["Low", bar.low],
+                          ["Close", bar.close],
+                        ] as const
+                      ).map(([label, value]) => (
+                        <View key={label} style={s.between}>
+                          <Text style={s.small}>{label}</Text>
+                          <Text style={s.body}>
+                            {value == null ? "Unavailable" : money(value, 2)}
+                          </Text>
+                        </View>
+                      ))}
+                      <View style={s.between}>
+                        <Text style={s.small}>Volume</Text>
+                        <Text style={s.body}>
+                          {bar.volume == null
+                            ? "Unavailable"
+                            : bar.volume.toLocaleString("en-IN")}
+                        </Text>
+                      </View>
+                      {bar.open == null && (
+                        <Text style={s.small}>
+                          This source contains closing prices only.
+                        </Text>
+                      )}
+                    </View>
+                  );
+                })()
+              : null}
             <View style={s.between}>
               <Text style={s.small}>Your position</Text>
               <Text style={s.body}>{holding.quantity} shares</Text>
