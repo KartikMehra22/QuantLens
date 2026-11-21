@@ -7,6 +7,7 @@ import {
 } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, Text, View, useWindowDimensions } from "react-native";
+import { ComparePortfolios } from "../../components/compare-portfolios";
 import { AllocationDonut, LineChart } from "../../components/charts";
 import {
   Badge,
@@ -260,6 +261,7 @@ export default function Overview() {
             </View>
             <ArrowRight size={19} color={colors.muted} />
           </Pressable>
+          <ComparePortfolios />
         </>
       )}
     </Screen>
