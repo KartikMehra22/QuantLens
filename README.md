@@ -1,6 +1,6 @@
 # QuantLens
 
-A React Native mobile app for Indian-equity portfolio management, explainable risk analytics, scenario testing and statistical volatility forecasting. Semester-project implementation, v0.1.
+A React Native mobile app for Indian-equity portfolio management, explainable risk analytics, scenario testing and statistical volatility forecasting. Semester-project implementation with local account recovery, saved model experiments and benchmark comparisons.
 
 ## Run locally
 
@@ -56,7 +56,7 @@ uv run alembic upgrade head
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Apply the baseline migration to an **empty** database before first server startup. Local startup also creates missing tables for convenience; it does not upgrade existing schemas. If you already bootstrapped the exact v0.1 schema with the server, verify it before marking the baseline with `uv run alembic stamp head`. Future changes should use reviewed Alembic migrations.
+Startup applies Alembic migrations and can adopt only the exact original unversioned schema. Back up existing databases first. Unknown schemas fail safely. For controlled deployment, migrate explicitly and set `AUTO_MIGRATE=false`. See [operations](docs/operations.md).
 
 ## Implemented workflows
 
@@ -72,8 +72,12 @@ Apply the baseline migration to an **empty** database before first server startu
 - Alembic baseline, PostgreSQL runtime validation, SQLite/PostgreSQL test matrix and GitHub Actions checks.
 - Persistent server connection settings, credential-free readiness probes, preview and production native transport policies.
 - Manual GitHub Actions workflow for a standalone internal Android APK.
+- Rotating refresh tokens, recovery codes with SMTP or a private local outbox, and authentication throttling.
+- Price-only Nifty 50 comparisons on aligned dates, and comparisons across 2–5 owned portfolios.
+- Saved asynchronous rolling evaluations with progress, cancellation, charts and reproducible JSON exports.
+- Opt-in daily historical refresh, sync history, additive migrations, request logs and local Docker deployment configuration.
 
-Initial catalog: ten NSE equities and two BSE instruments. This is a curated demonstration universe, not the entire exchange catalog. Stored bars currently contain closing and adjusted closing prices rather than complete OHLCV.
+Initial catalog: ten NSE equities and two BSE instruments. This is a curated demonstration universe, not the entire exchange catalog. Yahoo bars preserve available open, high, low, close, adjusted close and volume. Synthetic and close-only CSV histories leave unavailable fields null.
 
 ## Historical data
 
@@ -89,7 +93,7 @@ date,close,adjusted_close
 2025-01-03,4020,3970
 ```
 
-Import each holding under Profile, then choose **Use imported CSV data**. The API rejects incomplete source switches. Imported CSV histories are private to the portfolio; another user's upload cannot overwrite them. Sector metadata is a curated classification and may need updating.
+The same format can be imported for `^NSEI` via the API to enable a private CSV benchmark. Import each holding under Profile, then choose **Use imported CSV data**. The API rejects incomplete source switches. Imported CSV histories are private to the portfolio; another user's upload cannot overwrite them. Sector metadata is a curated classification and may need updating.
 
 ## Methodology
 
@@ -102,6 +106,9 @@ Historical VaR uses the empirical inverse CDF of daily losses at 95% confidence.
 Forecasts assume a zero conditional mean. EWMA uses lambda 0.94; the historical baseline uses the last 60 squared returns. GARCH is fitted in percentage-return units and its variances are explicitly converted back to decimal-return variance. Displayed forecasts are the square roots of daily variances, annualized for comparability; they are not five-day cumulative risk.
 
 ## Forecast evaluation
+
+The Analytics → Evaluation screen runs and saves rolling experiments. Results persist across sign-in and browser reloads. The API supports JSON exports at `/api/v1/portfolios/{id}/evaluations/{run}/export.json`. For a reproducible three-portfolio real-market study, run `uv run python ../experiments/research_study.py` from `backend/` with the intended database configured. It creates a separate research account and caches downloads in ignored `experiments/results`.
+
 
 Obtain a portfolio ID from the authenticated API or browser route requests, then run from `backend/`:
 
@@ -133,10 +140,12 @@ npx expo export --platform web
 
 Tests cover mathematical fixtures, risk-contribution reconciliation, drawdown initialization, forecast scaling and absence of lookahead, account/holding workflows, ownership isolation, private CSV caches, source-switch failures, saved snapshot integrity and exports. SQLite tests use a temporary database and no external market calls. PostgreSQL tests additionally validate NUMERIC precision, JSON queries, timezone-aware timestamps, cascades and migration parity; migration checks use an isolated temporary schema. Readiness tests verify a failed database returns a generic 503. Mobile connection tests cover local/public URL boundaries and credential-free health probes.
 
-## Configuration and remaining work
+## Configuration and scope
 
 See both `.env.example` files. Local startup creates an ignored `.jwt-secret` with restrictive permissions if JWT_SECRET is unset. For deployment set a persistent secret, configure HTTPS and explicit CORS origins, and disable demo access when unnecessary. Demo accounts are disposable local sandbox accounts; automatic cleanup is not implemented.
 
-This v0.1 does not include password recovery/email delivery, refresh-token rotation, transaction accounting, automatic scheduled data synchronization, benchmark comparisons, a graphical out-of-sample results screen, comprehensive mobile automation or store distribution. Before public hosting, add authentication throttling, operational logging, backups and deployment-specific configuration. A standalone APK build and physical-device execution remain distinct from the validated PostgreSQL runtime, generated native configuration, and JavaScript bundles.
+Core and research workflows are implemented locally. The study compares the same 252 target days after a 504-return rolling training window; numerical results and their limitations are documented in [study results](docs/study-results.md). Browser execution, database checks and native bundling are distinct from physical-device validation. The earlier APK predates this uncommitted completion batch and must be rebuilt when changes are approved for publishing.
+
+Transaction accounting, broker integration, live quotes, automatic corporate-action changes to share quantities, public hosting and store distribution are outside this semester implementation. Android/iOS hardware execution has not been verified. Recovery emails require configured SMTP; local mode uses an operator outbox. See [operations](docs/operations.md), [API reference](docs/api-reference.md) and [database design](docs/database.md).
 
 No investment advice or trade execution. No guaranteed live prices or model performance.
