@@ -1,6 +1,7 @@
 export type User = { id: string; name: string; email: string };
 export type AuthResponse = {
   access_token: string;
+  refresh_token?: string;
   user: User;
   expires_in: number;
 };
@@ -8,6 +9,8 @@ export type Portfolio = {
   id: string;
   name: string;
   data_mode: "synthetic" | "yahoo" | "csv";
+  auto_sync?: boolean;
+  last_sync_at?: string | null;
 };
 export type Instrument = {
   id: string;
@@ -60,6 +63,7 @@ export type Summary = {
   } | null;
   warnings: string[];
   methodology: string;
+  benchmark?: Benchmark;
   period_start?: string;
   period_end?: string;
 };
@@ -84,4 +88,41 @@ export type Report = {
   created_at: string;
   as_of: string;
   data_mode: string;
+};
+
+export type Benchmark = {
+  available: boolean;
+  reason?: string;
+  name?: string;
+  basis?: string;
+  observations?: number;
+  start?: string;
+  end?: string;
+  portfolio_return?: number;
+  benchmark_return?: number;
+  difference?: number;
+  beta?: number | null;
+  tracking_error?: number;
+  series?: { date: string; portfolio: number; benchmark: number }[];
+};
+export type Evaluation = {
+  id: string;
+  status: "queued" | "running" | "completed" | "failed" | "cancelled";
+  progress: number;
+  total: number;
+  data_mode: string;
+  as_of: string;
+  training_window: number;
+  test_days: number;
+  created_at: string;
+  error: string | null;
+  result?: {
+    metrics: Record<string, { mae: number; rmse: number; qlike: number }>;
+    predictions: Record<string, number[]>;
+    targets: number[];
+    evaluation_dates: string[];
+    scale: string;
+    target: string;
+    limitation: string;
+  } | null;
 };
