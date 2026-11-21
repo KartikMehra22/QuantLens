@@ -12,6 +12,7 @@ import {
   SectionTitle,
   Sheet,
 } from "../../components/ui";
+import { SyncPanel } from "../../components/sync-panel";
 import { ServerSettings } from "../../components/server-settings";
 import { usePortfolios, useSession, useSummary } from "../../providers";
 import { api, exportReport } from "../../services/api";
@@ -35,7 +36,7 @@ type Detail = {
   };
 };
 export default function Profile() {
-  const { user, logout } = useSession();
+  const { user, logout, updateProfile } = useSession();
   const { selected, select } = usePortfolios();
   const summary = useSummary();
   const client = useQueryClient();
@@ -43,6 +44,8 @@ export default function Profile() {
   const [error, setError] = useState<unknown>(null);
   const [message, setMessage] = useState("");
   const [manage, setManage] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [displayName, setDisplayName] = useState("");
   const [name, setName] = useState("");
   const [confirm, setConfirm] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -76,6 +79,7 @@ export default function Profile() {
       client.invalidateQueries({ queryKey: ["portfolios"] }),
       client.invalidateQueries({ queryKey: ["summary"] }),
       client.invalidateQueries({ queryKey: ["prices"] }),
+      client.invalidateQueries({ queryKey: ["sync-history"] }),
     ]);
   };
   return (
@@ -111,6 +115,15 @@ export default function Profile() {
           </View>
         </View>
         <Text style={s.small}>QuantLens v0.1 · Virtual portfolios · INR</Text>
+        <Button
+          title="Edit display name"
+          secondary
+          onPress={() => {
+            setDisplayName(user?.name || "");
+            setError(null);
+            setEditingProfile(true);
+          }}
+        />
       </View>
       <ServerSettings />
       <ErrorBox error={error} />
@@ -129,6 +142,7 @@ export default function Profile() {
       ) : null}
       {selected && (
         <>
+          <SyncPanel key={selected.id} portfolio={selected} />
           <View style={s.card}>
             <View style={s.between}>
               <SectionTitle title="Portfolio & data" />
@@ -534,6 +548,32 @@ export default function Profile() {
             ))}
           </>
         )}
+      </Sheet>
+      <Sheet
+        title="Your display name"
+        visible={editingProfile}
+        close={() => {
+          if (!busy) setEditingProfile(false);
+        }}
+      >
+        <Field
+          label="Display name"
+          value={displayName}
+          onChangeText={setDisplayName}
+          placeholder="Your name"
+        />
+        <ErrorBox error={error} />
+        <Button
+          title="Save display name"
+          busy={busy === "profile"}
+          disabled={!displayName.trim()}
+          onPress={() =>
+            void perform("profile", async () => {
+              await updateProfile(displayName.trim());
+              setEditingProfile(false);
+            })
+          }
+        />
       </Sheet>
     </Screen>
   );
