@@ -1,0 +1,10 @@
+.venv
+.env
+.env.*
+.jwt-secret
+*.db*
+.outbox
+__pycache__
+.pytest_cache
+.ruff_cache
+tests
