@@ -1,14 +1,18 @@
+import asyncio
 import csv
 import io
+import json
+import logging
+import time
 from contextlib import asynccontextmanager
-from datetime import date, datetime, timezone
+from datetime import date
 from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import uuid4
 
 import numpy as np
 import pandas as pd
-from fastapi import Depends, FastAPI, HTTPException, Query, Response
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr, Field
@@ -18,23 +22,48 @@ from sqlalchemy.orm import Session
 
 from .analytics.forecasting import forecast
 from .analytics.risk import stress
+from .bootstrap import bootstrap_database
 from .config import settings
-from .database import Base, SessionLocal, engine, get_db
-from .market import fetch_yahoo, replace_history, seed_catalog, seed_demo_portfolio, seed_synthetic
+from .database import SessionLocal, engine, get_db
+from .evaluations import router as evaluation_router
+from .evaluations import start_jobs, stop_jobs
+from .extras import router as extras_router
+from .limiting import protect
+from .market import replace_history, seed_catalog, seed_demo_portfolio, seed_synthetic
 from .models import AnalysisRun, Holding, Instrument, Portfolio, PriceBar, User
+from .recovery import router as recovery_router
 from .security import DUMMY_HASH, current_session, current_user, issue_token, passwords
 from .services import own_portfolio, portfolio_data
+from .syncing import scheduler, sync_portfolio
 
 
 @asynccontextmanager
 async def lifespan(_):
-    Base.metadata.create_all(engine)
+    bootstrap_database()
     with SessionLocal() as db:
         seed_catalog(db)
         if settings.allow_demo:
             seed_synthetic(db)
-    yield
+    start_jobs()
+    task = asyncio.create_task(scheduler())
+    try:
+        yield
+    finally:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        stop_jobs()
 
+
+request_logger = logging.getLogger("quantlens.requests")
+request_logger.setLevel(logging.INFO)
+if not request_logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    request_logger.addHandler(handler)
+    request_logger.propagate = False
 
 app = FastAPI(title="QuantLens API", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
@@ -43,6 +72,31 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )
+app.include_router(recovery_router)
+app.include_router(evaluation_router)
+app.include_router(extras_router)
+
+
+@app.middleware("http")
+async def request_logging(request: Request, call_next):
+    ident = uuid4().hex
+    start = time.perf_counter()
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = ident
+    request_logger.info(
+        json.dumps(
+            {
+                "request_id": ident,
+                "method": request.method,
+                "path": request.url.path,
+                "status": response.status_code,
+                "duration_ms": round((time.perf_counter() - start) * 1000, 1),
+            }
+        )
+    )
+    return response
+
+
 DB = Annotated[Session, Depends(get_db)]
 Auth = Annotated[User, Depends(current_user)]
 
@@ -87,7 +141,13 @@ def save_run(db, portfolio, kind, payload):
 
 
 def serialize_portfolio(portfolio):
-    return {"id": portfolio.id, "name": portfolio.name, "data_mode": portfolio.data_mode}
+    return {
+        "id": portfolio.id,
+        "name": portfolio.name,
+        "data_mode": portfolio.data_mode,
+        "auto_sync": portfolio.auto_sync,
+        "last_sync_at": portfolio.last_sync_at,
+    }
 
 
 @app.get("/health")
@@ -101,7 +161,8 @@ def health():
 
 
 @app.post("/api/v1/auth/register", status_code=201)
-def register(body: Register, db: DB):
+def register(body: Register, db: DB, request: Request):
+    protect(request, "register", str(body.email), limit=10, seconds=3600)
     name = body.name.strip()
     if not name:
         raise HTTPException(422, "Name cannot be blank.")
@@ -116,7 +177,8 @@ def register(body: Register, db: DB):
 
 
 @app.post("/api/v1/auth/login")
-def login(body: Login, db: DB):
+def login(body: Login, db: DB, request: Request):
+    protect(request, "login", str(body.email), limit=10, seconds=900)
     user = db.scalar(select(User).where(User.email == str(body.email).lower()))
     valid = passwords.verify(body.password, user.password_hash if user else DUMMY_HASH)
     if not user or not valid:
@@ -125,7 +187,8 @@ def login(body: Login, db: DB):
 
 
 @app.post("/api/v1/auth/demo")
-def demo(db: DB):
+def demo(db: DB, request: Request):
+    protect(request, "demo", limit=30, seconds=3600)
     if not settings.allow_demo:
         raise HTTPException(404, "Demo mode is disabled.")
     # Each visitor gets an isolated account and portfolio; demo credentials are never shared.
@@ -142,6 +205,20 @@ def demo(db: DB):
 
 @app.get("/api/v1/auth/me")
 def me(user: Auth):
+    return {"id": user.id, "name": user.name, "email": user.email}
+
+
+class ProfileInput(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+
+
+@app.patch("/api/v1/auth/me")
+def update_profile(body: ProfileInput, db: DB, user: Auth):
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(422, "Display name cannot be blank.")
+    user.name = name
+    db.commit()
     return {"id": user.id, "name": user.name, "email": user.email}
 
 
@@ -182,6 +259,8 @@ def update_portfolio(portfolio_id: str, body: PortfolioInput, db: DB, user: Auth
     if body.data_mode == "synthetic" and not settings.allow_demo:
         raise HTTPException(422, "Synthetic mode is disabled.")
     p.name, p.data_mode = body.name.strip(), body.data_mode
+    if body.data_mode != "yahoo":
+        p.auto_sync = False
     db.flush()
     portfolio_data(db, p)
     db.commit()
@@ -250,10 +329,39 @@ def instrument_prices(
     return {
         "source": source,
         "prices": [
-            {"date": str(b.date), "close": float(b.close), "adjusted_close": float(b.adjusted_close)}
+            {
+                "date": str(b.date),
+                "close": float(b.close),
+                "adjusted_close": float(b.adjusted_close),
+                "open": float(b.open) if b.open is not None else None,
+                "high": float(b.high) if b.high is not None else None,
+                "low": float(b.low) if b.low is not None else None,
+                "volume": int(b.volume) if b.volume is not None else None,
+            }
             for b in reversed(bars)
         ],
     }
+
+
+@app.get("/api/v1/portfolios/{portfolio_id}/holdings")
+def list_holdings(portfolio_id: str, db: DB, user: Auth):
+    own_portfolio(db, user.id, portfolio_id)
+    return [
+        {
+            "id": h.id,
+            "instrument_id": i.id,
+            "quantity": float(h.quantity),
+            "average_cost": float(h.average_cost),
+            "symbol": i.symbol,
+            "name": i.name,
+            "exchange": i.exchange,
+            "sector": i.sector,
+            "color": i.color,
+        }
+        for h, i in db.execute(
+            select(Holding, Instrument).join(Instrument).where(Holding.portfolio_id == portfolio_id)
+        )
+    ]
 
 
 @app.post("/api/v1/portfolios/{portfolio_id}/holdings", status_code=201)
@@ -373,18 +481,10 @@ def volatility_forecast(
 @app.post("/api/v1/portfolios/{portfolio_id}/data-refreshes")
 def refresh_prices(portfolio_id: str, db: DB, user: Auth):
     p = own_portfolio(db, user.id, portfolio_id)
-    ids = list(db.scalars(select(Holding.instrument_id).where(Holding.portfolio_id == p.id)))
-    if not ids:
+    if not db.scalar(select(Holding.id).where(Holding.portfolio_id == p.id)):
         raise HTTPException(422, "Add at least one holding before refreshing.")
     try:
-        # Retrieve all histories first; failures never switch the portfolio to partially downloaded data.
-        histories = {ident: fetch_yahoo(ident) for ident in ids}
-        for ident, frame in histories.items():
-            replace_history(db, ident, frame, "yahoo")
-        p.data_mode = "yahoo"
-        db.flush()
-        portfolio_data(db, p)  # Validate cross-asset overlap before committing source switch.
-        db.commit()
+        return sync_portfolio(db, p)
     except HTTPException:
         db.rollback()
         raise
@@ -394,13 +494,12 @@ def refresh_prices(portfolio_id: str, db: DB, user: Auth):
             502,
             "Market data provider is unavailable or returned invalid history. Existing data is unchanged; retry later or import CSV.",
         ) from None
-    return {"status": "updated", "instruments": len(ids), "source": "yahoo"}
 
 
 @app.post("/api/v1/portfolios/{portfolio_id}/prices/import")
 def import_prices(portfolio_id: str, body: CsvInput, db: DB, user: Auth):
     p = own_portfolio(db, user.id, portfolio_id)
-    if not db.scalar(
+    if body.instrument_id != "^NSEI" and not db.scalar(
         select(Holding.id).where(Holding.portfolio_id == p.id, Holding.instrument_id == body.instrument_id)
     ):
         raise HTTPException(422, "Import prices for an instrument held in this portfolio.")
@@ -414,7 +513,8 @@ def import_prices(portfolio_id: str, body: CsvInput, db: DB, user: Auth):
             raise ValueError("Supply 2–10,000 unique daily records.")
         if (
             frame.index.max() >= date.today()
-            or (frame <= 0).any().any()
+            or (frame < 0.000001).any().any()
+            or (frame > 1e12).any().any()
             or not np.isfinite(frame.to_numpy()).all()
         ):
             raise ValueError("Use finite positive prices on completed historical dates.")
@@ -482,71 +582,18 @@ def export_csv(portfolio_id: str, db: DB, user: Auth):
 
 @app.get("/api/v1/portfolios/{portfolio_id}/export.pdf")
 def export_pdf(portfolio_id: str, db: DB, user: Auth):
-    from html import escape
-
-    from reportlab.lib import colors
-    from reportlab.lib.styles import getSampleStyleSheet
-    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from .models import ForecastEvaluation
+    from .reporting import portfolio_pdf
 
     data, _ = portfolio_data(db, own_portfolio(db, user.id, portfolio_id))
-    output = io.BytesIO()
-    styles = getSampleStyleSheet()
-    story = [
-        Paragraph("QuantLens | Portfolio risk report", styles["Title"]),
-        Paragraph(escape(data["name"]), styles["Heading2"]),
-        Paragraph(
-            f"Price date: {data['as_of']} | Source: {data['data_mode']} | Generated: {datetime.now(timezone.utc).date()}",
-            styles["Normal"],
-        ),
-        Spacer(1, 14),
-        Paragraph(
-            f"Portfolio value: INR {data['value']:,.2f} | Unrealized P&amp;L: INR {data['pnl']:,.2f}",
-            styles["Normal"],
-        ),
-    ]
-    table = [["Instrument", "Quantity", "Close (INR)", "Value (INR)", "Weight"]]
-    table += [
-        [h["symbol"], str(h["quantity"]), f"{h['price']:,.2f}", f"{h['value']:,.2f}", f"{h['weight']:.1%}"]
-        for h in data["holdings"]
-    ]
-    t = Table(table, repeatRows=1, hAlign="LEFT")
-    t.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#173B32")),
-                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 9),
-                ("TOPPADDING", (0, 0), (-1, -1), 9),
-                ("LINEBELOW", (0, 0), (-1, -1), 0.3, colors.lightgrey),
-            ]
-        )
+    latest = db.scalar(
+        select(ForecastEvaluation)
+        .where(ForecastEvaluation.portfolio_id == portfolio_id, ForecastEvaluation.status == "completed")
+        .order_by(ForecastEvaluation.created_at.desc())
+        .limit(1)
     )
-    story += [Spacer(1, 15), t, Spacer(1, 15)]
-    if data["metrics"]:
-        for key, value in data["metrics"].items():
-            story.append(
-                Paragraph(
-                    f"{key.replace('_', ' ').title()}: {value:.6f}"
-                    if value is not None
-                    else f"{key}: unavailable",
-                    styles["Normal"],
-                )
-            )
-    story += [
-        Spacer(1, 14),
-        Paragraph("Methodology and limitations", styles["Heading2"]),
-        Paragraph(escape(data["methodology"]), styles["Normal"]),
-    ]
-    for warning in data["warnings"]:
-        story += [Spacer(1, 7), Paragraph(escape(warning), styles["Normal"])]
-    story.append(
-        Paragraph(
-            "Educational analysis. Historical estimates do not guarantee future outcomes.", styles["Normal"]
-        )
-    )
-    SimpleDocTemplate(output, title="QuantLens risk report").build(story)
     return Response(
-        output.getvalue(),
+        portfolio_pdf(data, latest),
         media_type="application/pdf",
         headers={"Content-Disposition": 'attachment; filename="quantlens-risk-report.pdf"'},
     )
