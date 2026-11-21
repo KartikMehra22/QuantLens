@@ -188,3 +188,125 @@ export function AllocationDonut({ holdings }: { holdings: Holding[] }) {
     </Svg>
   );
 }
+
+export function MultiLineChart({
+  series,
+  labels,
+  height = 200,
+}: {
+  series: { name: string; color: string; values: number[] }[];
+  labels: string[];
+  height?: number;
+}) {
+  const [width, setWidth] = useState(350);
+  const [selected, setSelected] = useState<number | null>(null);
+  const values = series.flatMap((line) => line.values);
+  if (labels.length < 2 || !values.length)
+    return (
+      <Text style={s.small}>Not enough observations to draw this chart.</Text>
+    );
+  const min = Math.min(...values),
+    max = Math.max(...values);
+  const range = max - min || Math.max(1, Math.abs(max) * 0.01);
+  const x = (index: number) => 7 + (index / (labels.length - 1)) * 786;
+  const y = (value: number) => 12 + ((max - value) / range) * (height - 28);
+  const pick = selected === null ? null : Math.min(selected, labels.length - 1);
+  return (
+    <View style={{ gap: 12 }}>
+      <View style={[s.row, { flexWrap: "wrap", gap: 12 }]}>
+        {series.map((line) => (
+          <View key={line.name} style={[s.row, { gap: 6 }]}>
+            <View
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 4,
+                backgroundColor: line.color,
+              }}
+            />
+            <Text style={[s.small, { fontSize: 10 }]}>{line.name}</Text>
+          </View>
+        ))}
+      </View>
+      {pick !== null && (
+        <View style={{ gap: 4 }}>
+          <Text style={s.small}>{labels[pick]}</Text>
+          {series.map((line) => (
+            <Text key={line.name} style={[s.small, { color: line.color }]}>
+              {line.name}: {line.values[pick]?.toFixed(4)}
+            </Text>
+          ))}
+        </View>
+      )}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Inspect comparison chart"
+        onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+        onPress={(event) =>
+          setSelected(
+            Math.max(
+              0,
+              Math.min(
+                labels.length - 1,
+                Math.round(
+                  (event.nativeEvent.locationX / width) * (labels.length - 1),
+                ),
+              ),
+            ),
+          )
+        }
+      >
+        <Svg
+          width="100%"
+          height={height}
+          viewBox={`0 0 800 ${height}`}
+          preserveAspectRatio="none"
+        >
+          {[0.15, 0.5, 0.85].map((value) => (
+            <Line
+              key={value}
+              x1={0}
+              x2={800}
+              y1={height * value}
+              y2={height * value}
+              stroke={colors.line}
+              strokeDasharray="3 7"
+            />
+          ))}
+          {series.map((line) => (
+            <Path
+              key={line.name}
+              d={line.values
+                .map(
+                  (v, i) =>
+                    `${i ? "L" : "M"} ${x(i).toFixed(2)} ${y(v).toFixed(2)}`,
+                )
+                .join(" ")}
+              stroke={line.color}
+              fill="none"
+              strokeWidth={line.name.includes("proxy") ? 1 : 2}
+              vectorEffect="non-scaling-stroke"
+            />
+          ))}
+          {pick !== null && (
+            <Line
+              x1={x(pick)}
+              x2={x(pick)}
+              y1={0}
+              y2={height}
+              stroke={colors.text}
+              strokeDasharray="3 4"
+            />
+          )}
+        </Svg>
+      </Pressable>
+      <View style={s.between}>
+        <Text style={s.small}>{labels[0]}</Text>
+        <Text style={s.small}>{labels.at(-1)}</Text>
+      </View>
+      <Text style={s.small}>
+        Shared vertical scale: {min.toFixed(3)} to {max.toFixed(3)}
+      </Text>
+    </View>
+  );
+}
