@@ -12,6 +12,10 @@ if test_database:
     if url.get_backend_name() != "postgresql" or not (url.database or "").endswith("_test"):
         raise RuntimeError("PostgreSQL integration tests require a dedicated database ending in _test.")
 os.environ["DATABASE_URL"] = test_database or f"sqlite:///{_temp.name}/test.db"
+os.environ["SMTP_HOST"] = ""
+os.environ["RATE_LIMITS_ENABLED"] = "false"
+os.environ["SYNC_POLL_SECONDS"] = "3600"
+os.environ["OUTBOX_DIR"] = f"{_temp.name}/outbox"
 os.environ["JWT_SECRET"] = "test-only-secret-that-is-long-enough-for-hmac-verification"
 
 from app.main import app  # noqa: E402
