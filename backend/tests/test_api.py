@@ -95,7 +95,7 @@ def test_market_failure_does_not_switch_sources(client, account, monkeypatch):
     def fail(_):
         raise ValueError("Simulated provider failure")
 
-    monkeypatch.setattr("app.main.fetch_yahoo", fail)
+    monkeypatch.setattr("app.syncing.fetch_yahoo", fail)
     base = f"/api/v1/portfolios/{ident}"
     assert client.post(base + "/data-refreshes", headers=headers).status_code == 502
     assert client.get(base + "/summary", headers=headers).json()["data_mode"] == "synthetic"
