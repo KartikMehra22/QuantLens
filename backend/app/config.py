@@ -8,7 +8,19 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     database_url: str = "sqlite:///./quantlens.db"
     jwt_secret: str = ""
-    token_minutes: int = 60
+    token_minutes: int = 15
+    auto_migrate: bool = True
+    refresh_days: int = 7
+    reset_minutes: int = 10
+    smtp_host: str = ""
+    smtp_port: int = 1025
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_tls: bool = False
+    mail_from: str = "QuantLens <no-reply@quantlens.local>"
+    outbox_dir: str = ".outbox"
+    rate_limits_enabled: bool = True
+    sync_poll_seconds: int = 60
     cors_origins: str = "http://localhost:8081,http://127.0.0.1:8081,http://localhost:8082"
     allow_demo: bool = True
 
