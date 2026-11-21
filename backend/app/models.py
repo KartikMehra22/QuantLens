@@ -2,7 +2,19 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
 
-from sqlalchemy import JSON, CheckConstraint, Date, DateTime, ForeignKey, Numeric, String, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    Date,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    UniqueConstraint,
+    false,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .database import Base
@@ -39,6 +51,9 @@ class Portfolio(Base):
     data_mode: Mapped[str] = mapped_column(String(20), default="synthetic")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
+    auto_sync: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    last_sync_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
 
 class Instrument(Base):
     __tablename__ = "instruments"
@@ -73,6 +88,10 @@ class PriceBar(Base):
     close: Mapped[Decimal] = mapped_column(Numeric(22, 8))
     adjusted_close: Mapped[Decimal] = mapped_column(Numeric(22, 8))
     source: Mapped[str] = mapped_column(String(80), index=True)
+    open: Mapped[Decimal | None] = mapped_column(Numeric(22, 8), nullable=True)
+    high: Mapped[Decimal | None] = mapped_column(Numeric(22, 8), nullable=True)
+    low: Mapped[Decimal | None] = mapped_column(Numeric(22, 8), nullable=True)
+    volume: Mapped[int | None] = mapped_column(Numeric(24, 0), nullable=True)
 
 
 class AnalysisRun(Base):
@@ -82,3 +101,43 @@ class AnalysisRun(Base):
     kind: Mapped[str] = mapped_column(String(25))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
     payload: Mapped[dict] = mapped_column(JSON)
+
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    session_id: Mapped[str] = mapped_column(ForeignKey("sessions.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PasswordReset(Base):
+    __tablename__ = "password_resets"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    code_hash: Mapped[str] = mapped_column(String(64))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class ForecastEvaluation(Base):
+    __tablename__ = "forecast_evaluations"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    portfolio_id: Mapped[str] = mapped_column(ForeignKey("portfolios.id", ondelete="CASCADE"), index=True)
+    status: Mapped[str] = mapped_column(String(20), default="queued")
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    total: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    payload: Mapped[dict] = mapped_column(JSON)
+    error: Mapped[str | None] = mapped_column(String(300), nullable=True)
+
+
+class DataSyncRun(Base):
+    __tablename__ = "data_sync_runs"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    portfolio_id: Mapped[str] = mapped_column(ForeignKey("portfolios.id", ondelete="CASCADE"), index=True)
+    status: Mapped[str] = mapped_column(String(20))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+    instruments: Mapped[int] = mapped_column(Integer, default=0)
+    message: Mapped[str] = mapped_column(String(300), default="")
