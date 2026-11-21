@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .analytics.risk import diversification, metrics
+from .benchmark import compare_benchmark
 from .models import Holding, Instrument, Portfolio, PriceBar
 
 
@@ -136,4 +137,5 @@ def portfolio_data(db: Session, portfolio: Portfolio, lookback=252):
         "period_end": str(as_of),
         "methodology": "Fixed-weight daily-rebalanced hypothetical historical portfolio; adjusted close returns; current value weights; 252-day annualization; one-day 95% historical VaR/CVaR; 6% effective annual risk-free assumption.",
     }
+    result["benchmark"] = compare_benchmark(db, portfolio, ids, weights, raw, lookback)
     return result, portfolio_returns
