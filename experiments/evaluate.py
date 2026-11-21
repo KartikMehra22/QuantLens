@@ -3,6 +3,7 @@
 Evaluates fixed current weights retrospectively; it does not backtest an investable historical strategy.
 No provider calls are made. The portfolio's persisted source is used and recorded in the output.
 """
+
 import argparse
 import json
 import sys
@@ -34,12 +35,20 @@ def main():
         if returns is None:
             parser.error("The portfolio has no holdings.")
         result = evaluate(returns.to_numpy(), args.training_window, args.test_days)
-        result.update({"portfolio_id": p.id, "data_mode": p.data_mode, "as_of": data["as_of"],
-                       "generated_at": datetime.now(timezone.utc).isoformat(), "holdings": data["holdings"],
-                       "methodology": data["methodology"], "return_dates": [str(d) for d in returns.index],
-                       "return_values": returns.tolist(),
-                       "evaluation_dates": [str(d) for d in returns.index[-args.test_days:]],
-                       "limitation": "Squared daily returns are a noisy variance proxy. Current holdings and weights are selected retrospectively. Synthetic observations cannot support empirical market conclusions."})
+        result.update(
+            {
+                "portfolio_id": p.id,
+                "data_mode": p.data_mode,
+                "as_of": data["as_of"],
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "holdings": data["holdings"],
+                "methodology": data["methodology"],
+                "return_dates": [str(d) for d in returns.index],
+                "return_values": returns.tolist(),
+                "evaluation_dates": [str(d) for d in returns.index[-args.test_days :]],
+                "limitation": "Squared daily returns are a noisy variance proxy. Current holdings and weights are selected retrospectively. Synthetic observations cannot support empirical market conclusions.",
+            }
+        )
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, indent=2, allow_nan=False) + "\n")
