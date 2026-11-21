@@ -16,6 +16,7 @@ type Session = {
   ready: boolean;
   accept: (auth: AuthResponse) => Promise<void>;
   logout: () => Promise<void>;
+  updateProfile: (name: string) => Promise<void>;
   changeServer: (url: string) => Promise<void>;
 };
 const SessionContext = createContext<Session>(null!);
@@ -53,7 +54,7 @@ export function SessionProvider({ children }: React.PropsWithChildren) {
     };
   }, [clear]);
   const accept = async (auth: AuthResponse) => {
-    await storage.set(auth.access_token);
+    await storage.save(auth.access_token, auth.refresh_token, auth.user.id);
     client.clear();
     setUser(auth.user);
   };
@@ -61,6 +62,10 @@ export function SessionProvider({ children }: React.PropsWithChildren) {
     if (url === (await getServerUrl())) return;
     await clear();
     await saveServerUrl(url);
+  };
+  const updateProfile = async (name: string) => {
+    const current = await api<User>("/auth/me", "PATCH", { name });
+    setUser(current);
   };
   const logout = async () => {
     try {
@@ -71,7 +76,7 @@ export function SessionProvider({ children }: React.PropsWithChildren) {
   };
   return (
     <SessionContext.Provider
-      value={{ user, ready, accept, logout, changeServer }}
+      value={{ user, ready, accept, logout, changeServer, updateProfile }}
     >
       {children}
     </SessionContext.Provider>
