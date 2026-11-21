@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LineChart } from "../components/charts";
+import { RecoverySheet } from "../components/recovery-sheet";
 import { ServerSettings } from "../components/server-settings";
 import { Badge, Button, ErrorBox, Field, Loading } from "../components/ui";
 import { useSession } from "../providers";
@@ -147,6 +148,7 @@ export default function Login() {
               secure
               placeholder={register ? "At least 8 characters" : "Your password"}
             />
+            {!register && <RecoverySheet />}
             <ErrorBox error={error} />
             <Button
               title={register ? "Create account" : "Sign in"}
