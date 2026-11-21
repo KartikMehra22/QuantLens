@@ -9,6 +9,8 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { LineChart } from "../../components/charts";
+import { BenchmarkPanel } from "../../components/benchmark-panel";
+import { EvaluationPanel } from "../../components/evaluation-panel";
 import {
   Badge,
   Button,
@@ -69,7 +71,7 @@ export default function Analytics() {
           },
         ]}
       >
-        {["Risk", "Diversification", "Forecasts"].map((name) => (
+        {["Risk", "Diversification", "Forecasts", "Evaluation"].map((name) => (
           <Pressable
             key={name}
             accessibilityRole="button"
@@ -209,6 +211,10 @@ export default function Analytics() {
               />
             </>
           )}
+          {tab === "Evaluation" && (
+            <EvaluationPanel key={selected!.id} portfolioId={selected!.id} />
+          )}
+          {tab === "Risk" && <BenchmarkPanel benchmark={data.benchmark} />}
           {tab === "Diversification" && (
             <>
               <View style={s.card}>
