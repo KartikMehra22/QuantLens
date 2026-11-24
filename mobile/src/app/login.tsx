@@ -1,5 +1,5 @@
 import { Redirect } from "expo-router";
-import { ArrowUpRight, ScanLine, ShieldCheck } from "lucide-react-native";
+import { ArrowDownRight, ScanLine } from "lucide-react-native";
 import { useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -10,22 +10,25 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { LineChart } from "../components/charts";
 import { RecoverySheet } from "../components/recovery-sheet";
 import { ServerSettings } from "../components/server-settings";
-import { Badge, Button, ErrorBox, Field, Loading } from "../components/ui";
+import { Button, ErrorBox, Field, Loading, Sheet } from "../components/ui";
 import { useSession } from "../providers";
 import { api } from "../services/api";
 import { colors, s } from "../theme";
 import { AuthResponse } from "../types";
 
-const illustration = Array.from(
-  { length: 65 },
-  (_, i) => 100 + i * 0.6 + Math.sin(i * 0.45) * 3 + Math.cos(i * 0.15) * 5,
-);
 export default function Login() {
   const { user, ready, accept } = useSession();
-  const [register, setRegister] = useState(false);
+  const [mode, setMode] = useState<"welcome" | "signin" | "register">(
+    "welcome",
+  );
+  const [exampleOpen, setExampleOpen] = useState(false);
+  const register = mode === "register";
+  const changeMode = (next: typeof mode) => {
+    setMode(next);
+    setError(null);
+  };
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -86,114 +89,165 @@ export default function Login() {
               QuantLens.
             </Text>
           </View>
-          <View style={{ gap: 18 }}>
-            <Badge text="A CLEARER VIEW OF YOUR INVESTMENTS" />
-            <Text
-              style={{
-                color: colors.text,
-                fontSize: 42,
-                fontWeight: "500",
-                lineHeight: 47,
-                letterSpacing: -2,
-              }}
-            >
-              Your portfolio.{`\n`}More perspective.
-            </Text>
-            <Text style={s.subtitle}>
-              See the returns. Understand the risk.{`\n`}Explore what comes
-              next.
-            </Text>
-          </View>
-          <View
-            style={[
-              s.card,
-              { padding: 16, gap: 6, backgroundColor: "#17271F" },
-            ]}
-          >
-            <View style={s.between}>
-              <Text style={s.label}>ONE PORTFOLIO. EVERY ANGLE.</Text>
-              <ArrowUpRight size={19} color={colors.green} />
-            </View>
-            <LineChart
-              points={illustration}
-              height={80}
-              labels={["ILLUSTRATIVE CHART", "NOT MARKET DATA"]}
-            />
-          </View>
-          <ServerSettings />
-          <View style={{ gap: 16 }}>
-            <Text
-              style={{ color: colors.text, fontSize: 21, fontWeight: "500" }}
-            >
-              {register ? "Create your account" : "Welcome to QuantLens"}
-            </Text>
-            {register && (
-              <Field
-                label="Your name"
-                value={name}
-                onChangeText={setName}
-                placeholder="How should we call you?"
-              />
-            )}
-            <Field
-              label="Email address"
-              value={email}
-              onChangeText={setEmail}
-              placeholder="you@example.com"
-            />
-            <Field
-              label="Password"
-              value={password}
-              onChangeText={setPassword}
-              secure
-              placeholder={register ? "At least 8 characters" : "Your password"}
-            />
-            {!register && <RecoverySheet />}
-            <ErrorBox error={error} />
-            <Button
-              title={register ? "Create account" : "Sign in"}
-              onPress={() => void submit()}
-              busy={busy === "auth"}
-              disabled={
-                !!busy || !email || !password || (register && !name.trim())
-              }
-            />
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => {
-                setRegister(!register);
-                setError(null);
-              }}
-              style={{ padding: 8 }}
-            >
-              <Text style={[s.small, { textAlign: "center" }]}>
-                {register ? "Already have an account? " : "New here? "}
-                <Text style={{ color: colors.green }}>
-                  {register ? "Sign in" : "Create an account"}
+          {mode === "welcome" ? (
+            <>
+              <View style={{ gap: 12 }}>
+                <Text
+                  accessibilityRole="header"
+                  style={[s.title, { fontSize: 36 }]}
+                >
+                  Track Indian stocks. Understand your risk.
                 </Text>
+                <Text style={s.subtitle}>
+                  Build a practice portfolio, see what it’s worth, and find out
+                  how a market drop could affect it.
+                </Text>
+              </View>
+              <View style={{ gap: 10 }}>
+                <Button
+                  title="Try a sample portfolio"
+                  onPress={() => void submit(true)}
+                  busy={busy === "demo"}
+                />
+                <ErrorBox error={error} />
+                <Text style={s.small}>No sign-up. Uses simulated prices.</Text>
+                <Button
+                  title="Create an account"
+                  secondary
+                  onPress={() => changeMode("register")}
+                  disabled={!!busy}
+                />
+                <Button
+                  title="Sign in"
+                  secondary
+                  onPress={() => changeMode("signin")}
+                  disabled={!!busy}
+                />
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setExampleOpen(true)}
+                style={({ pressed }) => [
+                  s.card,
+                  {
+                    backgroundColor: colors.greenDark,
+                    opacity: pressed ? 0.8 : 1,
+                  },
+                ]}
+              >
+                <View style={s.row}>
+                  <ArrowDownRight size={20} color={colors.green} />
+                  <Text style={[s.body, { flex: 1, fontWeight: "600" }]}>
+                    What if the market fell 20%?
+                  </Text>
+                </View>
+                <Text style={s.subtitle}>
+                  See a simple example without connecting to a server.
+                </Text>
+                <Text style={[s.body, { color: colors.green }]}>
+                  View example
+                </Text>
+              </Pressable>
+            </>
+          ) : (
+            <View style={{ gap: 16 }}>
+              <Text
+                style={{ color: colors.text, fontSize: 21, fontWeight: "500" }}
+              >
+                {register ? "Create your account" : "Sign in to QuantLens"}
               </Text>
-            </Pressable>
-            <View style={s.divider} />
-            <Button
-              title="Explore the demo"
-              secondary
-              onPress={() => void submit(true)}
-              busy={busy === "demo"}
-              disabled={!!busy}
-            />
-            <Text style={[s.small, { textAlign: "center" }]}>
-              A personal sandbox with synthetic prices.{`\n`}No real money or
-              market observations.
-            </Text>
-          </View>
-          <View style={[s.row, { justifyContent: "center" }]}>
-            <ShieldCheck size={14} color={colors.faint} />
-            <Text style={[s.small, { color: colors.faint }]}>
-              Educational analytics · No trade execution
-            </Text>
-          </View>
+              {register && (
+                <Field
+                  label="Your name"
+                  value={name}
+                  onChangeText={setName}
+                  placeholder="Your name"
+                />
+              )}
+              <Field
+                label="Email address"
+                value={email}
+                onChangeText={setEmail}
+                placeholder="you@example.com"
+              />
+              <Field
+                label="Password"
+                value={password}
+                onChangeText={setPassword}
+                secure
+                placeholder={
+                  register ? "At least 8 characters" : "Your password"
+                }
+              />
+              {!register && <RecoverySheet />}
+              <ErrorBox error={error} />
+              <Button
+                title={register ? "Create account" : "Sign in"}
+                onPress={() => void submit()}
+                busy={busy === "auth"}
+                disabled={
+                  !!busy || !email || !password || (register && !name.trim())
+                }
+              />
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => {
+                  changeMode(register ? "signin" : "register");
+                }}
+                disabled={!!busy}
+                style={{ padding: 12 }}
+              >
+                <Text style={[s.small, { textAlign: "center" }]}>
+                  {register ? "Already have an account? " : "New here? "}
+                  <Text style={{ color: colors.green }}>
+                    {register ? "Sign in" : "Create an account"}
+                  </Text>
+                </Text>
+              </Pressable>
+              <Button
+                title="Back to welcome"
+                secondary
+                onPress={() => changeMode("welcome")}
+                disabled={!!busy}
+              />
+            </View>
+          )}
+          <ServerSettings />
+          <Text style={[s.small, { textAlign: "center" }]}>
+            For learning with virtual holdings.
+          </Text>
         </ScrollView>
       </KeyboardAvoidingView>
+      <Sheet
+        title="A sample stress test"
+        visible={exampleOpen}
+        close={() => setExampleOpen(false)}
+      >
+        <Text style={s.subtitle}>
+          Imagine you hold ₹1,00,000 in stocks and every stock falls by 20%.
+        </Text>
+        <View style={s.card}>
+          <View style={s.between}>
+            <Text style={s.body}>Starting value</Text>
+            <Text style={s.body}>₹1,00,000</Text>
+          </View>
+          <View style={s.between}>
+            <Text style={s.body}>Estimated loss</Text>
+            <Text style={[s.body, { color: colors.red }]}>−₹20,000</Text>
+          </View>
+          <View style={s.divider} />
+          <View style={s.between}>
+            <Text style={s.body}>Value after the drop</Text>
+            <Text style={[s.body, { color: colors.green }]}>₹80,000</Text>
+          </View>
+        </View>
+        <Text style={s.subtitle}>
+          In QuantLens, you can run this scenario on your own practice holdings,
+          see which stocks drive the loss, and compare your portfolio with the
+          Nifty 50.
+        </Text>
+        <Button title="Back to welcome" onPress={() => setExampleOpen(false)} />
+      </Sheet>
     </SafeAreaView>
   );
 }

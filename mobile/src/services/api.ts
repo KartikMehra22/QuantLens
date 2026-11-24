@@ -21,7 +21,7 @@ export async function request(path: string, options: RequestInit = {}) {
   const baseUrl = await getServerUrl();
   if (!baseUrl)
     throw new Error(
-      "Set your server address using Server connection before signing in.",
+      "Open Server connection and save a server address to continue.",
     );
   const controller = new AbortController();
   const timer = setTimeout(

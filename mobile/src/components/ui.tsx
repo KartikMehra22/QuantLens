@@ -289,11 +289,26 @@ function PortfolioPicker() {
     <>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Choose portfolio"
+        accessibilityLabel={
+          selected ? "Choose portfolio" : "Create a portfolio"
+        }
         onPress={() => setOpen(true)}
-        style={[s.row, { alignSelf: "flex-start", paddingVertical: 10 }]}
+        style={[
+          s.row,
+          !selected && s.chip,
+          {
+            alignSelf: "flex-start",
+            paddingVertical: 12,
+            marginBottom: selected ? 0 : 10,
+          },
+        ]}
       >
-        <Text style={{ color: colors.muted, fontSize: 13 }}>
+        <Text
+          style={{
+            color: selected ? colors.muted : colors.green,
+            fontSize: 13,
+          }}
+        >
           {selected?.name || "Create a portfolio"}
         </Text>
         <ChevronDown color={colors.muted} size={14} />

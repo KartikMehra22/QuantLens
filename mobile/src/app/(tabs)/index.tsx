@@ -11,6 +11,7 @@ import { ComparePortfolios } from "../../components/compare-portfolios";
 import { AllocationDonut, LineChart } from "../../components/charts";
 import {
   Badge,
+  Button,
   Change,
   Empty,
   ErrorBox,
@@ -27,11 +28,12 @@ export default function Overview() {
   const { selected, loading, error } = usePortfolios();
   const query = useSummary(period);
   const data = query.data;
+  const isDemo = user?.email.endsWith("@quantlens.invalid") ?? false;
   const wide = useWindowDimensions().width >= 800;
   return (
     <Screen
-      title={`Your portfolio, in focus.`}
-      description={`Welcome back, ${user?.name.split(" ")[0]}. Here's the bigger picture.`}
+      title="Portfolio overview"
+      description="See what your holdings are worth and how they have moved over time."
       refreshing={query.isRefetching}
       onRefresh={() => void query.refetch()}
     >
@@ -39,14 +41,40 @@ export default function Overview() {
         <Loading />
       ) : error || query.error ? (
         <ErrorBox error={error || query.error} />
-      ) : !data?.holdings.length ? (
+      ) : !selected ? (
         <Empty
-          title="Start with what you hold"
-          description="Choose or create a portfolio above, then add your first equity to explore its performance and risk."
-          action={() => router.push("/holdings")}
+          title="Create your first portfolio"
+          description="Tap the Create a portfolio button above and give it a name. Then you can add stocks and see their value and risk."
         />
+      ) : !data?.holdings.length ? (
+        <View style={s.card}>
+          <SectionTitle
+            title="Add your first stock"
+            caption="Open Holdings, tap Add holding, and enter the number of shares and average purchase price. You can use made-up amounts to practice."
+          />
+          <Button
+            title="Open Holdings"
+            onPress={() => router.push("/holdings")}
+          />
+        </View>
       ) : (
         <>
+          {isDemo && (
+            <View style={[s.card, { backgroundColor: colors.greenDark }]}>
+              <SectionTitle
+                title="Explore your sample portfolio"
+                caption="This portfolio comes with example holdings and simulated prices."
+              />
+              <Text style={s.body}>
+                Start with a 20% market drop to see how much the holdings could
+                lose.
+              </Text>
+              <Button
+                title="Try a market scenario"
+                onPress={() => router.push("/scenarios")}
+              />
+            </View>
+          )}
           <View
             style={[
               s.card,
@@ -83,7 +111,7 @@ export default function Overview() {
               </Text>
               <View style={s.row}>
                 <Change value={data.pnl_pct} />
-                <Text style={s.small}>unrealized return</Text>
+                <Text style={s.small}>gain or loss (%)</Text>
               </View>
             </View>
             <View
@@ -103,7 +131,7 @@ export default function Overview() {
                 </Text>
               </View>
               <View style={{ gap: 6, alignItems: "flex-end" }}>
-                <Text style={s.small}>Unrealized P&L</Text>
+                <Text style={s.small}>Gain or loss</Text>
                 <Text
                   style={{
                     color: data.pnl >= 0 ? colors.green : colors.red,
@@ -121,7 +149,7 @@ export default function Overview() {
             <View style={[s.card, { flex: wide ? 1.6 : undefined }]}>
               <View style={s.between}>
                 <SectionTitle
-                  title="The historical picture"
+                  title="Historical simulation"
                   caption="Hypothetical growth of ₹100"
                 />
                 <ArrowUpRight size={20} color={colors.green} />
@@ -174,7 +202,7 @@ export default function Overview() {
             </View>
             <View style={[s.card, { flex: wide ? 1 : undefined }]}>
               <SectionTitle
-                title="Where you're invested"
+                title="Portfolio breakdown"
                 caption="Current value allocation"
               />
               <View style={{ alignItems: "center" }}>
@@ -216,7 +244,7 @@ export default function Overview() {
               [
                 "Annual volatility",
                 pct(data.metrics?.annualized_volatility),
-                "Annualized daily variability",
+                "How much prices fluctuate over a year",
               ],
               [
                 "Maximum drawdown",

@@ -114,8 +114,8 @@ export default function Holdings() {
   };
   return (
     <Screen
-      title="What you hold."
-      description="Your equities, allocations, and unrealized returns."
+      title="Holdings"
+      description="Add Indian stocks, enter your share count, and check their prices."
       refreshing={query.isRefetching}
       onRefresh={() => void query.refetch()}
     >
