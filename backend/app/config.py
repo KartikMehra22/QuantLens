@@ -1,6 +1,7 @@
 import secrets
 from pathlib import Path
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,6 +24,13 @@ class Settings(BaseSettings):
     sync_poll_seconds: int = 60
     cors_origins: str = "http://localhost:8081,http://127.0.0.1:8081,http://localhost:8082"
     allow_demo: bool = True
+
+    @field_validator("database_url")
+    @classmethod
+    def use_psycopg(cls, url: str) -> str:
+        if url.startswith(("postgresql://", "postgres://")):
+            return "postgresql+psycopg://" + url.split("://", 1)[1]
+        return url
 
 
 settings = Settings()
