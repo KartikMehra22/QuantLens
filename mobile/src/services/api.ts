@@ -2,6 +2,7 @@ import { Platform } from "react-native";
 import { tokenStorage } from "./session";
 import { createAuthorizedRequester } from "./http-client";
 import { getServerUrl } from "./connection";
+import { isRenderServer } from "./server-url";
 
 let unauthorized: (() => void) | null = null;
 export const setUnauthorized = (callback: (() => void) | null) => {
@@ -23,10 +24,12 @@ export async function request(path: string, options: RequestInit = {}) {
     throw new Error(
       "Open Server connection and save a server address to continue.",
     );
+  const hostedOnRender = isRenderServer(baseUrl);
   const controller = new AbortController();
+  const timeout = path.includes("data-refreshes") ? 150000 : 45000;
   const timer = setTimeout(
     () => controller.abort(),
-    path.includes("data-refreshes") ? 150000 : 45000,
+    hostedOnRender ? timeout + 75000 : timeout,
   );
   try {
     const response = await authorizedRequest(baseUrl, path, {
@@ -42,10 +45,16 @@ export async function request(path: string, options: RequestInit = {}) {
     return response;
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError")
-      throw new Error("The request timed out. Please retry.");
+      throw new Error(
+        hostedOnRender
+          ? "The server is taking longer than usual to respond. Please retry."
+          : "The request timed out. Please retry.",
+      );
     if (error instanceof TypeError)
       throw new Error(
-        "Cannot reach QuantLens. Check that the backend is running and your phone is on the same Wi-Fi.",
+        baseUrl.startsWith("https:")
+          ? "Cannot reach QuantLens. Check your internet connection and server address."
+          : "Cannot reach QuantLens. Check that the backend is running and your phone is on the same Wi-Fi.",
       );
     throw error;
   } finally {

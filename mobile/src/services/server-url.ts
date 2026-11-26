@@ -52,10 +52,19 @@ export function normalizeServerUrl(
   return url.origin;
 }
 
+export function isRenderServer(url: string): boolean {
+  return new URL(url).hostname.endsWith(".onrender.com");
+}
+
 export async function probeServer(address: string, allowLocalHttp = true) {
   const url = normalizeServerUrl(address, allowLocalHttp);
+  const hostedOnRender = isRenderServer(url);
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
+  // A free Render instance needs time to wake after being idle.
+  const timer = setTimeout(
+    () => controller.abort(),
+    hostedOnRender ? 120000 : 8000,
+  );
   try {
     // A probe never includes account credentials, including when checking a different server.
     const response = await fetch(`${url}/health`, {
@@ -74,12 +83,16 @@ export async function probeServer(address: string, allowLocalHttp = true) {
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       throw new Error(
-        "Connection timed out. Check the address and Wi-Fi connection.",
+        hostedOnRender
+          ? "The server is taking longer than usual to start. Try testing the connection again."
+          : "Connection timed out. Check the address and Wi-Fi connection.",
       );
     }
     if (error instanceof TypeError) {
       throw new Error(
-        "Cannot connect. Start the backend and connect your phone to the same Wi-Fi.",
+        url.startsWith("https:")
+          ? "Cannot connect. Check your internet connection and server address."
+          : "Cannot connect. Start the backend and connect your phone to the same Wi-Fi.",
       );
     }
     throw error;
